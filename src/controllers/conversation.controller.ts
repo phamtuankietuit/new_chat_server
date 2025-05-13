@@ -113,7 +113,6 @@ export default class ConversationController {
         )
         .orderBy('"latest"."createdAt"', 'DESC')
         .leftJoinAndSelect('c.conversationReads', 'cr', 'cr.isAdmin = true')
-        .leftJoinAndSelect('cr.lastReadMessage', 'lastReadMessage')
         .getMany();
 
       const count = conversationsAndLatestMessage.length;
@@ -125,8 +124,15 @@ export default class ConversationController {
 
       const result = await Promise.all(
         paginatedConversations.map(async (conversation: Conversation) => {
+          const lastReadMessage: Message | null =
+            await messageRepository.findOne({
+              where: {
+                id: conversation.conversationReads[0].lastReadMessageId,
+              },
+            });
+
           const lastReadTime =
-            conversation.conversationReads[0]?.lastReadMessage?.createdAt ??
+            lastReadMessage?.createdAt ??
             conversation.conversationReads[0].updatedAt;
 
           const [unreadMessages, unreadCount] = await messageRepository
@@ -151,20 +157,11 @@ export default class ConversationController {
             }
           );
 
-          let newUnreadCount = unreadCount;
-          if (
-            unreadCount === 1 &&
-            unreadMessages[0].createdAt.toISOString() ===
-              lastReadTime.toISOString()
-          ) {
-            newUnreadCount = 0;
-          }
-
           return {
             id: conversation.id,
             conversationReadId: conversation?.conversationReads[0]?.id,
             customerId: conversation.customerId,
-            unreadCount: newUnreadCount,
+            unreadCount: unreadCount - 1 < 0 ? 0 : unreadCount - 1,
             latestMessage,
           };
         })
@@ -177,6 +174,67 @@ export default class ConversationController {
         itemsCount: paginatedConversations.length,
         count,
         conversations: result,
+      };
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  @Get('/:id')
+  public async getConversationById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { dataSource } = req.app.locals;
+      const { id } = req.params;
+
+      const conversationRepository = dataSource.getRepository(Conversation);
+      const messageRepository = dataSource.getRepository(Message);
+
+      const conversation: Conversation | null =
+        await conversationRepository.findOne({
+          where: {
+            id,
+            conversationReads: { isAdmin: true },
+          },
+          relations: {
+            conversationReads: true,
+          },
+        });
+
+      if (!conversation) {
+        throw new BadRequestError('Conversation does not exist.');
+      }
+
+      const lastReadMessage: Message | null = await messageRepository.findOne({
+        where: {
+          id: conversation.conversationReads[0].lastReadMessageId,
+        },
+      });
+
+      const lastReadTime =
+        lastReadMessage?.createdAt ??
+        conversation.conversationReads[0].updatedAt;
+
+      const [unreadMessages, unreadCount] = await messageRepository
+        .createQueryBuilder('message')
+        .where('message.customerId IS NOT NULL')
+        .andWhere('message.conversationId = :conversationId', {
+          conversationId: conversation.id,
+        })
+        .andWhere('message.createdAt > :lastReadTime', { lastReadTime })
+        .getManyAndCount();
+
+      res.locals.message = 'Conversation retrieved successfully.';
+      res.locals.data = {
+        id: conversation.id,
+        conversationReadId: conversation?.conversationReads[0]?.id,
+        customerId: conversation.customerId,
+        unreadCount: unreadCount - 1 < 0 ? 0 : unreadCount - 1,
       };
 
       next();
@@ -211,9 +269,7 @@ export default class ConversationController {
             conversationReads: { isAdmin: false },
           },
           relations: {
-            conversationReads: {
-              lastReadMessage: true,
-            },
+            conversationReads: true,
           },
         });
 
@@ -221,8 +277,14 @@ export default class ConversationController {
         throw new BadRequestError('Conversation does not exist.');
       }
 
+      const lastReadMessage: Message | null = await messageRepository.findOne({
+        where: {
+          id: conversation.conversationReads[0].lastReadMessageId,
+        },
+      });
+
       const lastReadTime =
-        conversation.conversationReads[0]?.lastReadMessage?.createdAt ??
+        lastReadMessage?.createdAt ??
         conversation.conversationReads[0].updatedAt;
 
       const [unreadMessages, unreadCount] = await messageRepository
@@ -234,19 +296,11 @@ export default class ConversationController {
         .andWhere('message.createdAt > :lastReadTime', { lastReadTime })
         .getManyAndCount();
 
-      let newUnreadCount = unreadCount;
-      if (
-        unreadCount === 1 &&
-        unreadMessages[0].createdAt.toISOString() === lastReadTime.toISOString()
-      ) {
-        newUnreadCount = 0;
-      }
-
       res.locals.message = 'Conversation retrieved successfully.';
       res.locals.data = {
         id: conversation.id,
         conversationReadId: conversation?.conversationReads[0]?.id,
-        unreadCount: newUnreadCount,
+        unreadCount: unreadCount - 1 < 0 ? 0 : unreadCount - 1,
       };
 
       next();

@@ -15,7 +15,7 @@ interface ConfigValues {
   dbMigrationsDir: string;
   jwtAccessKey: string;
   jwtRefreshKey: string;
-  clientSite: string;
+  clientSites: string[];
   encryptionKey: string | undefined;
 }
 
@@ -38,7 +38,9 @@ class Config implements ConfigValues {
     process.env.DB_MIGRATIONS_DIR ?? 'src/database/migrations/*.ts';
   jwtAccessKey = process.env.JWT_ACCESS_KEY ?? 'THIS IS ACCESS KEY';
   jwtRefreshKey = process.env.JWT_REFRESH_KEY ?? 'THIS IS REFRESH KEY';
-  clientSite = process.env.CLIENT_SITE ?? 'http://localhost:3030';
+  clientSites = (process.env.CLIENT_SITES ?? 'http://localhost:3030')?.split(
+    ','
+  );
   encryptionKey = process.env.ENCRYPTION_KEY;
 }
 

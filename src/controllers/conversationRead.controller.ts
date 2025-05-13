@@ -53,7 +53,7 @@ export default class ConversationReadController {
       }
 
       conversationReadRepository.merge(conversationRead, {
-        lastReadMessage: message,
+        lastReadMessageId: message.id,
       });
       await conversationReadRepository.save(conversationRead);
 

@@ -5,6 +5,7 @@ import { Message } from '../database/entities/Message';
 import { Conversation } from '../database/entities/Conversation';
 import { BadRequestError } from '../utils/errors';
 import { omit } from '../utils';
+import { LessThan } from 'typeorm';
 
 @Controller('/messages')
 export default class MessageController {
@@ -15,7 +16,7 @@ export default class MessageController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { dataSource } = req.app.locals;
+      const { dataSource, ioSocket } = req.app.locals;
       const { conversationId, customerId, contentType, body } = req.body;
 
       if (!conversationId) {
@@ -44,8 +45,21 @@ export default class MessageController {
 
       res.locals.message = 'Message created successfully.';
       res.locals.data = {
-        message: omit(message, ['conversation']),
+        message: {
+          ...omit(message, ['conversation']),
+          conversationId: conversation.id,
+        },
       };
+
+      if (ioSocket) {
+        ioSocket.emit('message', {
+          ...omit(message, ['conversation']),
+          conversationId: conversation.id,
+          assignee: {
+            id: message.customerId ? 'admin' : conversation.customerId,
+          },
+        });
+      }
 
       next();
     } catch (error) {
@@ -61,31 +75,44 @@ export default class MessageController {
   ): Promise<void> {
     try {
       const { dataSource } = req.app.locals;
-      const { conversationId, pageNumber = 1, pageSize = 10 } = req.query;
+      const { conversationId, fromId, pageSize = 20 } = req.query;
 
       if (!conversationId || typeof conversationId !== 'string') {
         throw new BadRequestError(
           'Conversation ID is required and must be a string.'
         );
       }
-
       const messageRepository = dataSource.getRepository(Message);
-      const [messages, count] = await messageRepository.findAndCount({
-        where: {
-          conversation: {
-            id: conversationId,
-          },
+
+      let whereCondition: any = {
+        conversation: {
+          id: conversationId,
         },
+      };
+
+      if (fromId && typeof fromId === 'string') {
+        const fromMessage: Message | null = await messageRepository.findOne({
+          where: { id: fromId },
+        });
+
+        if (fromMessage) {
+          whereCondition = {
+            ...whereCondition,
+            createdAt: LessThan(fromMessage.createdAt),
+          };
+        }
+      }
+
+      const [messages, count] = await messageRepository.findAndCount({
+        where: whereCondition,
         order: {
           createdAt: 'DESC',
         },
-        skip: (Number(pageNumber) - 1) * Number(pageSize),
         take: Number(pageSize),
       });
 
       res.locals.message = 'Messages retrieved successfully.';
       res.locals.data = {
-        pageNumber: Number(pageNumber),
         pageSize: Number(pageSize),
         itemsCount: messages.length,
         count,

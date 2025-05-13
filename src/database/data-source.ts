@@ -14,6 +14,7 @@ function getConfig(): DataSourceOptions {
     entities: [config.dbEntitiesDir],
     subscribers: [config.dbSubscribersDir],
     migrations: [config.dbMigrationsDir],
+    ssl: true,
   };
 }
 

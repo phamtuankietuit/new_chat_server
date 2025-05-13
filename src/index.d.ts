@@ -1,12 +1,13 @@
 import 'express';
-// import { Socket } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { DataSource } from 'typeorm';
 
 declare global {
   namespace Express {
     interface Locals {
       dataSource: DataSource;
-      // socket: Socket;
+      socket: Socket;
+      ioSocket: Server;
     }
   }
 }

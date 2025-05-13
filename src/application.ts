@@ -19,8 +19,8 @@ import {
   UnauthorizedError,
 } from './utils/errors';
 import { MetadataKeys } from './utils/enums';
-import config from './configuration';
 import { IRouter } from './decorators/handlers';
+import configuration from './configuration';
 
 class Application {
   private readonly _instance: ExApplication;
@@ -36,7 +36,13 @@ class Application {
     this._instance.use(express.urlencoded({ extended: false }));
     this._instance.use(
       cors({
-        origin: config.clientSite,
+        origin: (origin, callback) => {
+          if (!origin || configuration.clientSites.includes(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error('Not allowed by CORS'));
+          }
+        },
         credentials: true,
       })
     );

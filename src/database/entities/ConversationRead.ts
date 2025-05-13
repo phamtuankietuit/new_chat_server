@@ -1,6 +1,5 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToOne } from 'typeorm';
+import { Column, Entity, ManyToOne } from 'typeorm';
 import { AppBaseEntity } from './AppBase';
-import { Message } from './Message';
 import { Conversation } from './Conversation';
 
 @Entity('conversation_reads')
@@ -8,9 +7,8 @@ export class ConversationRead extends AppBaseEntity {
   @Column({ default: false })
   isAdmin: boolean;
 
-  @OneToOne(() => Message)
-  @JoinColumn()
-  lastReadMessage: Message;
+  @Column({ nullable: true })
+  lastReadMessageId: string;
 
   @ManyToOne(
     () => Conversation,
