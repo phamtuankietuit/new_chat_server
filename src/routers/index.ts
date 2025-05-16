@@ -1,5 +1,6 @@
 import ConversationController from '../controllers/conversation.controller';
 import ConversationReadController from '../controllers/conversationRead.controller';
+import FastMessageController from '../controllers/fastMessage.controller';
 import MessageController from '../controllers/message.controller';
 
 export const appRouters = [
@@ -9,6 +10,7 @@ export const appRouters = [
       ConversationController,
       MessageController,
       ConversationReadController,
+      FastMessageController,
     ],
   },
 ];
