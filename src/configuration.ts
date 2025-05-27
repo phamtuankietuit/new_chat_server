@@ -17,6 +17,7 @@ interface ConfigValues {
   jwtRefreshKey: string;
   clientSites: string[];
   encryptionKey: string | undefined;
+  mainBEUrl: string;
 }
 
 class Config implements ConfigValues {
@@ -42,6 +43,7 @@ class Config implements ConfigValues {
     ','
   );
   encryptionKey = process.env.ENCRYPTION_KEY;
+  mainBEUrl = process.env.MAIN_BE_URL ?? 'http://localhost:4000';
 }
 
 export default new Config();

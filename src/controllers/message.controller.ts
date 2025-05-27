@@ -1,11 +1,13 @@
 import { NextFunction, Request, Response } from 'express';
 import Controller from '../decorators/controller';
 import { Get, Post } from '../decorators/handlers';
-import { Message } from '../database/entities/Message';
+import { Message, MessageContentTypes } from '../database/entities/Message';
 import { Conversation } from '../database/entities/Conversation';
 import { BadRequestError } from '../utils/errors';
 import { omit } from '../utils';
 import { LessThan } from 'typeorm';
+import axios from 'axios';
+import configuration from '../configuration';
 
 @Controller('/messages')
 export default class MessageController {
@@ -17,7 +19,14 @@ export default class MessageController {
   ): Promise<void> {
     try {
       const { dataSource, ioSocket } = req.app.locals;
-      const { conversationId, customerId, contentType, body } = req.body;
+      const {
+        conversationId,
+        customerId,
+        contentType,
+        body,
+        isBranchAddressQuery = false,
+        token,
+      } = req.body;
 
       if (!conversationId) {
         throw new BadRequestError('Conversation ID is required.');
@@ -59,6 +68,58 @@ export default class MessageController {
             id: message.customerId ? 'admin' : conversation.customerId,
           },
         });
+      }
+
+      if (isBranchAddressQuery && token) {
+        try {
+          const response = await axios.get(
+            `${configuration.mainBEUrl}/api/branches?sortBy=Name&sortDirection=asc&pageNumber=1&pageSize=10000`,
+            {
+              headers: {
+                Authorization: 'Bearer ' + token,
+              },
+            }
+          );
+
+          if (response.data.items.length > 0) {
+            const content: string = response.data.items
+              .map(
+                (item: any) =>
+                  `<li><strong>${item.name}</strong>: ${item.address.formattedAddress}</li>`
+              )
+              .join('');
+
+            const newBody = `
+                        <span style="font-size: 14px;">
+                            <strong>Các chi nhánh của KKBooks:</strong>
+                        </span>
+                        <ul>${content}</ul>`;
+
+            const systemMessage: Message = messageRepository.create({
+              contentType: MessageContentTypes.TEXT,
+              body: newBody,
+              conversation,
+              markdown: true,
+              createdBy: 'auto-system',
+            });
+
+            await messageRepository.save(systemMessage);
+
+            if (ioSocket) {
+              ioSocket.emit('message', {
+                ...omit(systemMessage, ['conversation']),
+                conversationId: conversation.id,
+                assignee: {
+                  id: 'auto-system',
+                },
+              });
+            }
+          }
+        } catch (error: any) {
+          console.error(
+            error.response?.data || error.message || 'Unknown error'
+          );
+        }
       }
 
       next();

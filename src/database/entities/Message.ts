@@ -10,6 +10,9 @@ export enum MessageContentTypes {
 
 @Entity('messages')
 export class Message extends AppBaseEntity {
+  @Column({ default: false })
+  markdown: boolean;
+
   @Column({ nullable: true })
   customerId: number;
 
