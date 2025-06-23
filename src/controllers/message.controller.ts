@@ -25,6 +25,8 @@ export default class MessageController {
         contentType,
         body,
         isBranchAddressQuery = false,
+        isProductQuery = false,
+        productId,
         token,
       } = req.body;
 
@@ -94,6 +96,107 @@ export default class MessageController {
                             <strong>Các chi nhánh của KKBooks:</strong>
                         </span>
                         <ul>${content}</ul>`;
+
+            const systemMessage: Message = messageRepository.create({
+              contentType: MessageContentTypes.TEXT,
+              body: newBody,
+              conversation,
+              markdown: true,
+              createdBy: 'auto-system',
+            });
+
+            await messageRepository.save(systemMessage);
+
+            if (ioSocket) {
+              ioSocket.emit('message', {
+                ...omit(systemMessage, ['conversation']),
+                conversationId: conversation.id,
+                assignee: {
+                  id: 'auto-system',
+                },
+              });
+            }
+          }
+        } catch (error: any) {
+          console.error(
+            error.response?.data || error.message || 'Unknown error'
+          );
+        }
+      }
+
+      if (isProductQuery && token && productId) {
+        try {
+          const response = await axios.get(
+            `${configuration.mainBEUrl}/api/products/${productId}`,
+            {
+              headers: {
+                Authorization: 'Bearer ' + token,
+              },
+            }
+          );
+
+          if (response.data) {
+            const product = response.data;            // Generate product variants content
+            let variantsContent = '';
+            if (product.productVariants && product.productVariants.length > 0) {
+              variantsContent = product.productVariants
+                .map((variant: any) => {
+                  // Generate variant label based on all option values
+                  let variantLabel = '';
+                  if (variant.optionValues && variant.optionValues.length > 0) {
+                    const optionTexts = variant.optionValues.map(
+                      (opt: any) => `${opt.name}: ${opt.value}`
+                    );
+                    variantLabel = optionTexts.join(', ');
+                  } else {
+                    variantLabel = 'Phiên bản mặc định';
+                  }
+
+                  let stockContent = '';
+                  if (
+                    variant.stockBreakdowns &&
+                    variant.stockBreakdowns.length > 0
+                  ) {
+                    stockContent = variant.stockBreakdowns
+                      .map(
+                        (stock: any) =>
+                          `<li>${stock.branchName}: ${stock.stockQuantity}</li>`
+                      )
+                      .join('');
+                  }
+                  return `
+                  <div style="margin-bottom: 6px;">
+                    <div style="font-weight: bold; color: #333; margin-bottom: 2px;">${variantLabel}:</div>
+                    <ul style="margin: 0; padding-left: 16px; font-size: 12px; color: #666;">
+                      ${stockContent}
+                    </ul>
+                  </div>`;
+                })
+                .join('');
+            }
+            const newBody = `
+              <div style="display: flex; flex-direction: column; max-width: 100%; text-align: left;">                <div style="display: flex; justify-content: center; margin-bottom: 10px;">
+                  <img
+                    src="${
+                      product.thumbnailImageUrls?.[0] ||
+                      product.largeImageUrls?.[0] ||
+                      ''
+                    }"
+                    alt="${product.name || ''}"
+                    width="100"
+                    height="50"
+                    style="border-radius: 4px; object-fit: cover;" />
+                </div>
+
+                <div style="text-align: left;">
+                  <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; line-height: 1.3;">
+                    ${product.name || 'Tên sản phẩm không xác định'}
+                  </div>
+                  <div style="font-size: 13px;">
+                    ${variantsContent}
+                  </div>
+                </div>
+              </div>`;
 
             const systemMessage: Message = messageRepository.create({
               contentType: MessageContentTypes.TEXT,
